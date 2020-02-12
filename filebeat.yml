@@ -1,0 +1,27 @@
+filebeat.inputs:
+- type: log
+  enabled: True
+  paths:
+    - ./file.txt
+
+processors:
+- dissect:
+    tokenizer: "%{@timestamp}, %{siteUrl}, %{statusCode}, %{responseTime}"
+    field: "message"
+    target_prefix: "dissect"
+
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+  # Period on which files under path should be checked for changes
+  reload.period: 10s
+
+setup.template.settings:
+  index.number_of_shards: 1
+
+cloud.id: "something"
+cloud.auth: "username:password"
+
+# Available log levels are: error, warning, info, debug
+logging.level: info

@@ -1,0 +1,72 @@
+---
+- hosts: localhost
+  become: True
+  vars:
+    sites:
+      - https://google.com
+      - https://test.com
+    slack:
+      token: "xxxxxx/xxxxxxxxxxxx/xxxxxxxxxxxxxxxxxx"
+      channel: "#test-channel"
+    file_path: "./file.txt"
+  tasks:
+    - name: set date_time
+      set_fact:
+        start_time: "{{ ansible_date_time.iso8601 }}"
+
+    - name: ensure file exists
+      file:
+        path: "{{ file_path }}"
+        state: touch
+
+    - name: verify if all urls works properly
+      uri:
+        url: "{{ item }}"
+        timeout: 10
+      with_items: "{{ sites }}"
+      register: health_check
+      ignore_errors: yes
+
+    # From the docs: The time in sec it took from the start until
+    # the first byte was just about to be transferred. This includes
+    # time_pretransfer and also the time the server needed to calculate the result.
+    - name: response times of sites via cURL via the `starttransfer` method
+      shell: 'curl {{ item }} -s -o /dev/null -w  "%{time_starttransfer}\n"'
+      register: curl_time
+      ignore_errors: True
+      args:
+        warn: false
+      with_items:
+        - "{{ sites }}"
+
+    - name: send Slack msg if a site failed
+      slack:
+        color: danger
+        token: "{{ slack.token }}"
+        msg: "{{ start_time }}: site {{ item.url }} has status {{ item.status }}, please verify"
+        channel: '{{ slack.channel }}'
+        icon_url: https://i.imgur.com/2f0Hpca.png
+        username: 'Ansible'
+      with_items: "{{ health_check.results }}"
+      when: 
+        - item.failed
+        - "'xxxxxxxx' not in slack.token"
+
+    - name: write url and status code to file
+      lineinfile:
+        line: "{{ start_time }}, {{ item.url }}, {{ item.status }}"
+        insertafter: EOF
+        dest: "{{ file_path }}"
+      with_items: "{{ health_check.results }}"
+
+#    - debug:
+#        msg: "{{ item.item }}"
+#      with_items: "{{ curl_time.results }}"
+
+    - name: append response times to the file
+      lineinfile:
+        path: "{{ file_path }}"
+        backrefs: yes
+        regexp: "^(.*{{ start_time }}, .*{{ item.item | replace ('https://', '') | replace ('http://', '')   }}.*)"
+        line: '\1, {{ item.stdout }}'
+      with_items: "{{ curl_time.results }}"
