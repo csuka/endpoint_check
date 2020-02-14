@@ -1,4 +1,4 @@
-# Check decency of endpoints
+# Check decency of endpoints with Ansible
 
 There was a need to check whether public endpoints are responding in a decent manner.
 
